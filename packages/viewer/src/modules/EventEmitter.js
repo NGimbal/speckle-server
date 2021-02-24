@@ -12,11 +12,13 @@ export default class EventEmitter {
     }
 
     this._events[name].push( listener )
+    // this makes sense to me
+    return listener
   }
 
   removeListener( name, listenerToRemove ) {
     if ( !this._events[name] ) return
-
+    console.log("removed: ", name)
     const filterListeners = ( listener ) => listener !== listenerToRemove
 
     this._events[name] = this._events[name].filter( filterListeners )

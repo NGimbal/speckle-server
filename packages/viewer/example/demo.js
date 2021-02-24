@@ -916,12 +916,16 @@ var EventEmitter = /*#__PURE__*/function () {
         this._events[name] = [];
       }
 
-      this._events[name].push(listener);
+      this._events[name].push(listener); // this makes sense to me
+
+
+      return listener;
     }
   }, {
     key: "removeListener",
     value: function removeListener(name, listenerToRemove) {
       if (!this._events[name]) return;
+      console.log("removed: ", name);
 
       var filterListeners = listener => listener !== listenerToRemove;
 
@@ -1312,14 +1316,21 @@ var SceneObjectManager = /*#__PURE__*/function () {
 
             if (renderMat.opacity !== 1) {
               var material = this.transparentMaterial.clone();
-              material.clippingPlanes = this.viewer.sectionBox.planes.map(p => p.plane);
+
+              if (this.viewer.sectionBox) {
+                material.clippingPlanes = this.viewer.sectionBox.planes.map(p => p.plane);
+              }
+
               material.color = color;
               material.opacity = renderMat.opacity !== 0 ? renderMat.opacity : 0.2;
               this.addTransparentSolid(wrapper, material); // It's not a transparent material!
             } else {
               var _material = this.solidMaterial.clone();
 
-              _material.clippingPlanes = this.viewer.sectionBox.planes.map(p => p.plane);
+              if (this.viewer.sectionBox) {
+                _material.clippingPlanes = this.viewer.sectionBox.planes.map(p => p.plane);
+              }
+
               _material.color = color;
               _material.metalness = renderMat.metalness;
               if (_material.metalness !== 0) _material.roughness = 0.1;
@@ -1331,7 +1342,10 @@ var SceneObjectManager = /*#__PURE__*/function () {
             // If we don't have defined material, just use the default
             var _material2 = this.solidMaterial.clone();
 
-            _material2.clippingPlanes = this.viewer.sectionBox.planes.map(p => p.plane);
+            if (this.viewer.sectionBox) {
+              _material2.clippingPlanes = this.viewer.sectionBox.planes.map(p => p.plane);
+            }
+
             this.addSolid(wrapper, _material2);
           }
 
@@ -1410,7 +1424,10 @@ var SceneObjectManager = /*#__PURE__*/function () {
       this.zoomExtents();
       this.viewer.reflectionsNeedUpdate = true;
       var sceneBox = new three__WEBPACK_IMPORTED_MODULE_0__.Box3().setFromObject(this.viewer.sceneManager.userObjects);
-      this.viewer.sectionBox.setFromBbox(sceneBox);
+
+      if (this.viewer.sectionBox) {
+        this.viewer.sectionBox.setFromBbox(sceneBox);
+      }
     }
   }, {
     key: "zoomToObject",
@@ -1531,14 +1548,13 @@ function _createClass(Constructor, protoProps, staticProps) { if (protoProps) _d
 var edges = [[0, 1], [1, 3], [3, 2], [2, 0], [4, 6], [6, 7], [7, 5], [5, 4], [2, 7], [0, 5], [1, 4], [3, 6]];
 
 var SectionBox = /*#__PURE__*/function () {
-  function SectionBox(viewer, _vis) {
+  function SectionBox(viewer) {
     _classCallCheck(this, SectionBox);
 
-    //defaults to invisible
-    var vis = _vis || false;
+    console.log("create section box!");
     this.viewer = viewer;
-    this.display = new three__WEBPACK_IMPORTED_MODULE_0__.Group();
-    this.display.visible = vis;
+    this.display = new three__WEBPACK_IMPORTED_MODULE_0__.Group(); // this.display.visible = true
+
     this.displayBox = new three__WEBPACK_IMPORTED_MODULE_0__.Group();
     this.displayEdges = new three__WEBPACK_IMPORTED_MODULE_0__.Group();
     this.displayHover = new three__WEBPACK_IMPORTED_MODULE_0__.Group();
@@ -1547,13 +1563,13 @@ var SectionBox = /*#__PURE__*/function () {
     this.display.add(this.displayHover);
     this.viewer.scene.add(this.display); // basic display of the section box
 
-    this.boxMaterial = new three__WEBPACK_IMPORTED_MODULE_0__.MeshBasicMaterial({// transparent:true,
+    this.boxMat = new three__WEBPACK_IMPORTED_MODULE_0__.MeshBasicMaterial({// transparent:true,
       // color: 0xffe842, 
       // opacity: 0.5
     }); // the box itself
 
     this.boxGeo = new three__WEBPACK_IMPORTED_MODULE_0__.BoxGeometry(2, 2, 2);
-    this.boxMesh = new three__WEBPACK_IMPORTED_MODULE_0__.Mesh(this.boxGeo, this.boxMaterial);
+    this.boxMesh = new three__WEBPACK_IMPORTED_MODULE_0__.Mesh(this.boxGeo, this.boxMat);
     this.boxMesh.visible = false;
     this.boxMesh.geometry.computeBoundingBox();
     this.boxMesh.geometry.computeBoundingSphere();
@@ -1579,7 +1595,6 @@ var SectionBox = /*#__PURE__*/function () {
     this.pointer = new three__WEBPACK_IMPORTED_MODULE_0__.Vector3();
     this.dragging = false; // planes face inward
     // indices correspond to vertex indices on the boxGeometry
-    // constant is set to 1 + epsilon to prevent planes from clipping section box display
 
     this.planes = [{
       axis: '+x',
@@ -1613,14 +1628,7 @@ var SectionBox = /*#__PURE__*/function () {
       indices: [0, 2, 7, 5]
     }]; // plane helpers
     // this.planeHelpers = this.planes.map( p => this.display.add(new THREE.PlaneHelper( p.plane, 2, 0x000000 ) ));
-    // adds clipping planes to all materials
-    // better to add clipping planes to renderer
 
-    this.viewer.renderer.localClippingEnabled = true;
-    var objs = this.viewer.sceneManager.objects;
-    objs.forEach(obj => {
-      obj.material.clippingPlanes = this.planes.map(c => c.plane);
-    });
     this.hoverMat = new three__WEBPACK_IMPORTED_MODULE_0__.MeshStandardMaterial({
       transparent: true,
       opacity: 0.6,
@@ -1628,9 +1636,19 @@ var SectionBox = /*#__PURE__*/function () {
       // color: 0xE91E63,
       metalness: 0.1,
       roughness: 0.75
-    }); // hovered event handler
+    }); // adds clipping planes to all materials
 
-    this.selectionHelper.on('hovered', (obj, e) => {
+    this.viewer.renderer.localClippingEnabled = true;
+    var objs = this.viewer.sceneManager.objects;
+    objs.forEach(obj => {
+      obj.material.clippingPlanes = this.planes.map(c => c.plane);
+    });
+    var sceneBox = new three__WEBPACK_IMPORTED_MODULE_0__.Box3().setFromObject(this.viewer.sceneManager.userObjects); // in case we're creating a sceneBox from an empty scene
+
+    if (sceneBox.equals(new three__WEBPACK_IMPORTED_MODULE_0__.Box3())) sceneBox = new three__WEBPACK_IMPORTED_MODULE_0__.Box3(new three__WEBPACK_IMPORTED_MODULE_0__.Vector3(-10, -10, -10), new three__WEBPACK_IMPORTED_MODULE_0__.Vector3(10, 10, 10));
+    this.setFromBbox(sceneBox); // hovered event handler
+
+    this.hoveredEvent = this.selectionHelper.on('hovered', (obj, e) => {
       if (obj.length === 0 && !this.dragging) {
         this.displayHover.clear();
         this.hoverPlane = new three__WEBPACK_IMPORTED_MODULE_0__.Vector3();
@@ -1651,17 +1669,20 @@ var SectionBox = /*#__PURE__*/function () {
       this.hoverPlane = plane.normal.clone();
       this.updateHover(planeObj);
     }); // Selection Helper seems unecessary for this type of thing
+    // Keep reference so we can remove later
 
-    this.viewer.renderer.domElement.addEventListener('pointerup', e => {
+    this.pointerUpEvent = e => {
       this.pointer = new three__WEBPACK_IMPORTED_MODULE_0__.Vector3();
       this.tempVerts = [];
       this.viewer.controls.enabled = true;
       this.dragging = false;
-    }); // get screen space vector of plane normal
+    };
+
+    this.viewer.renderer.domElement.addEventListener('pointerup', this.pointerUpEvent); // get screen space vector of plane normal
     // project mouse displacement vector onto it
     // move plane by that much
 
-    this.selectionHelper.on('object-drag', (obj, e) => {
+    this.objectDragEvent = this.selectionHelper.on('object-drag', (obj, e) => {
       // exit if we don't have a valid hoverPlane
       if (this.hoverPlane.equals(new three__WEBPACK_IMPORTED_MODULE_0__.Vector3())) return; // exit if we're clicking on nothing
 
@@ -1722,7 +1743,6 @@ var SectionBox = /*#__PURE__*/function () {
 
       for (var p of this.planes) {
         // reset plane
-        // p.plane.set(p.plane.normal, 1)
         var c = 0; // planes point inwards - if negative select max part of bbox
 
         if (p.plane.normal.dot(new three__WEBPACK_IMPORTED_MODULE_0__.Vector3(1, 1, 1)) > 0) {
@@ -1810,14 +1830,28 @@ var SectionBox = /*#__PURE__*/function () {
       hoverGeo.translate(centroid.x, centroid.y, centroid.z);
       var hoverMesh = new three__WEBPACK_IMPORTED_MODULE_0__.Mesh(hoverGeo, this.hoverMat);
       this.displayHover.add(hoverMesh);
-    }
+    } // removes section box and frees resources
+
   }, {
-    key: "toggleSectionBox",
-    value: function toggleSectionBox(_bool) {
-      var bool = _bool || !this.visible;
-      this.visible = bool;
-      this.display.visible = bool; // what's the tradeoff for having the clipping planes in material vs in the renderer?
-      // this.viewer.renderer.clippingPlanes = bool ? this.planes.reduce((p,c) => [...p,c.plane],[]) : []
+    key: "remove",
+    value: function remove() {
+      if (!this) return;
+      this.display.traverse(obj => {
+        if (typeof obj.geometry !== 'undefined') obj.geometry.dispose();
+      });
+      this.viewer.scene.remove(this.display);
+      this.hoverMat.dispose();
+      this.boxMat.dispose();
+      this.viewer.renderer.domElement.removeEventListener('pointerup', this.pointerUpEvent);
+      this.selectionHelper.removeListener('hovered', this.hoveredEvent);
+      this.selectionHelper.removeListener('object-drag', this.objectDragEvent);
+      this.selectionHelper.dispose();
+      delete this.selectionHelper; // this assumes only clipping planes are this box's clipping planes
+
+      var objs = this.viewer.sceneManager.objects;
+      objs.forEach(obj => {
+        obj.material.clippingPlanes = [];
+      });
     }
   }]);
 
@@ -2658,6 +2692,8 @@ var Viewer = /*#__PURE__*/function (_EventEmitter) {
 
     _this.selectionHelper.on('object-clicked', _this.handleSelect.bind(_assertThisInitialized(_this)));
 
+    _this.sectionBox = null;
+
     if (showStats) {
       _this.stats = new three_examples_jsm_libs_stats_module_js__WEBPACK_IMPORTED_MODULE_4__.default();
 
@@ -2668,10 +2704,7 @@ var Viewer = /*#__PURE__*/function (_EventEmitter) {
     _this.sectionPlaneHelper = new _SectionPlaneHelper__WEBPACK_IMPORTED_MODULE_7__.default(_assertThisInitialized(_this));
     _this.sceneManager = new _SceneObjectManager__WEBPACK_IMPORTED_MODULE_5__.default(_assertThisInitialized(_this));
 
-    _this.sectionPlaneHelper.createSectionPlane(); // Section Box
-
-
-    _this.sectionBox = new _SectionBox__WEBPACK_IMPORTED_MODULE_10__.default(_assertThisInitialized(_this));
+    _this.sectionPlaneHelper.createSectionPlane();
 
     _this.sceneLights();
 
@@ -2679,10 +2712,20 @@ var Viewer = /*#__PURE__*/function (_EventEmitter) {
 
     _this.loaders = [];
     return _this;
-  } // handleDoubleClick moved from SelectionHelper
-
+  }
 
   _createClass(Viewer, [{
+    key: "toggleSectionBox",
+    value: function toggleSectionBox() {
+      if (this.sectionBox) {
+        this.sectionBox.remove();
+        this.sectionBox = null;
+      } else {
+        this.sectionBox = new _SectionBox__WEBPACK_IMPORTED_MODULE_10__.default(this);
+      }
+    } // handleDoubleClick moved from SelectionHelper
+
+  }, {
     key: "handleDoubleClick",
     value: function handleDoubleClick(objs) {
       if (!objs || objs.length === 0) this.sceneManager.zoomExtents();else this.sceneManager.zoomToObject(objs[0].object);

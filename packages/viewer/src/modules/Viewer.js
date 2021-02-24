@@ -74,6 +74,8 @@ export default class Viewer extends EventEmitter {
     this.selectionHelper.on('object-doubleclicked', this.handleDoubleClick.bind(this))
     this.selectionHelper.on('object-clicked', this.handleSelect.bind(this))
 
+    this.sectionBox = null
+
     if ( showStats ) {
       this.stats = new Stats()
       this.container.appendChild( this.stats.dom )
@@ -86,13 +88,19 @@ export default class Viewer extends EventEmitter {
 
     this.sectionPlaneHelper.createSectionPlane()
 
-    // Section Box
-    this.sectionBox = new SectionBox(this)
-
     this.sceneLights()
     this.animate()
 
     this.loaders = []
+  }
+
+  toggleSectionBox(){
+    if(this.sectionBox){
+      this.sectionBox.remove()
+      this.sectionBox = null
+    } else {
+      this.sectionBox = new SectionBox(this)
+    }
   }
 
   // handleDoubleClick moved from SelectionHelper

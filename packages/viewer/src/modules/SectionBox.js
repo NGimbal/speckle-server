@@ -18,14 +18,12 @@ const edges = [
 ]
 
 export default class SectionBox {
-  constructor(viewer, _vis){
-    //defaults to invisible
-    let vis = _vis || false
-
+  constructor(viewer){  
+    console.log("create section box!")  
     this.viewer = viewer
     
     this.display = new THREE.Group()
-    this.display.visible = vis
+    // this.display.visible = true
 
     this.displayBox = new THREE.Group()
     this.displayEdges = new THREE.Group()
@@ -36,9 +34,9 @@ export default class SectionBox {
     this.display.add(this.displayHover)
 
     this.viewer.scene.add(this.display)
-
+    
     // basic display of the section box
-    this.boxMaterial = new THREE.MeshBasicMaterial({
+    this.boxMat = new THREE.MeshBasicMaterial({
                                       // transparent:true,
                                       // color: 0xffe842, 
                                       // opacity: 0.5
@@ -46,7 +44,7 @@ export default class SectionBox {
                   
     // the box itself
     this.boxGeo = new THREE.BoxGeometry(2,2,2)
-    this.boxMesh = new THREE.Mesh(this.boxGeo, this.boxMaterial)    
+    this.boxMesh = new THREE.Mesh(this.boxGeo, this.boxMat)    
     this.boxMesh.visible = false
     this.boxMesh.geometry.computeBoundingBox();
     this.boxMesh.geometry.computeBoundingSphere();
@@ -70,14 +68,13 @@ export default class SectionBox {
     this.hoverPlane = new THREE.Vector3()
 
     this.selectionHelper = new SelectionHelper( this.viewer, {subset:this.displayBox, hover:true} )
-
+    
     // pointer position
     this.pointer = new THREE.Vector3()
     this.dragging = false
     
     // planes face inward
     // indices correspond to vertex indices on the boxGeometry
-    // constant is set to 1 + epsilon to prevent planes from clipping section box display
     this.planes = [
       {
         axis: '+x', // right, x positive
@@ -108,15 +105,6 @@ export default class SectionBox {
     // plane helpers
     // this.planeHelpers = this.planes.map( p => this.display.add(new THREE.PlaneHelper( p.plane, 2, 0x000000 ) ));
     
-    // adds clipping planes to all materials
-    // better to add clipping planes to renderer
-    this.viewer.renderer.localClippingEnabled = true
-
-    let objs = this.viewer.sceneManager.objects
-    objs.forEach( obj => {
-      obj.material.clippingPlanes = this.planes.map( c => c.plane )
-    } )
-    
     this.hoverMat = new THREE.MeshStandardMaterial( {
       transparent: true,
       opacity: 0.6,
@@ -126,8 +114,22 @@ export default class SectionBox {
       roughness: 0.75,
     } ); 
 
+    // adds clipping planes to all materials
+    this.viewer.renderer.localClippingEnabled = true
+
+    let objs = this.viewer.sceneManager.objects
+    objs.forEach( obj => {
+      obj.material.clippingPlanes = this.planes.map( c => c.plane )
+    } )
+
+    let sceneBox = new THREE.Box3().setFromObject( this.viewer.sceneManager.userObjects )
+    // in case we're creating a sceneBox from an empty scene
+    if(sceneBox.equals(new THREE.Box3())) sceneBox = new THREE.Box3(new THREE.Vector3(-1,-1,-1),new THREE.Vector3(1,1,1))
+    
+    this.setFromBbox(sceneBox)
+
     // hovered event handler
-    this.selectionHelper.on('hovered', (obj, e) => {
+    this.hoveredEvent = this.selectionHelper.on('hovered', (obj, e) => {
       
       if(obj.length === 0 && !this.dragging) {
         this.displayHover.clear()
@@ -153,17 +155,20 @@ export default class SectionBox {
     })
 
     // Selection Helper seems unecessary for this type of thing
-    this.viewer.renderer.domElement.addEventListener('pointerup', (e) => {
+    // Keep reference so we can remove later
+    this.pointerUpEvent = (e) => {
       this.pointer = new THREE.Vector3()
       this.tempVerts = []
       this.viewer.controls.enabled = true
       this.dragging = false
-    })
+    }
+    
+    this.viewer.renderer.domElement.addEventListener('pointerup', this.pointerUpEvent)
 
     // get screen space vector of plane normal
     // project mouse displacement vector onto it
     // move plane by that much
-    this.selectionHelper.on('object-drag', (obj, e) => {
+    this.objectDragEvent = this.selectionHelper.on('object-drag', (obj, e) => {
       // exit if we don't have a valid hoverPlane
       if(this.hoverPlane.equals(new THREE.Vector3())) return
       // exit if we're clicking on nothing
@@ -231,7 +236,6 @@ export default class SectionBox {
     bbox.min.subScalar(10)
     for(let p of this.planes) {
       // reset plane
-      // p.plane.set(p.plane.normal, 1)
       let c = 0
       // planes point inwards - if negative select max part of bbox
       if ( p.plane.normal.dot(new THREE.Vector3(1,1,1)) > 0 ) {
@@ -326,12 +330,25 @@ export default class SectionBox {
     this.displayHover.add(hoverMesh)
   }
 
-  toggleSectionBox(_bool){
-    let bool = _bool || !this.visible
-    this.visible = bool
-    this.display.visible = bool
+  // removes section box and frees resources
+  remove(){
+    if(!this) return
+    this.display.traverse(obj => {if(typeof obj.geometry !== 'undefined') obj.geometry.dispose()})
+    this.viewer.scene.remove(this.display)
+    this.hoverMat.dispose()
+    this.boxMat.dispose()
 
-    // what's the tradeoff for having the clipping planes in material vs in the renderer?
-    // this.viewer.renderer.clippingPlanes = bool ? this.planes.reduce((p,c) => [...p,c.plane],[]) : []
+    this.viewer.renderer.domElement.removeEventListener('pointerup', this.pointerUpEvent)
+    this.selectionHelper.removeListener('hovered', this.hoveredEvent)
+    this.selectionHelper.removeListener('object-drag', this.objectDragEvent)
+
+    this.selectionHelper.dispose()
+    delete this.selectionHelper
+
+    // this assumes only clipping planes are this box's clipping planes
+    let objs = this.viewer.sceneManager.objects
+    objs.forEach( obj => {
+      obj.material.clippingPlanes = []
+    } )
   }
 }
